@@ -1,26 +1,33 @@
 /**
- * This file specifies how to run the `SudokuZkApp` smart contract locally using the `Mina.LocalBlockchain()` method.
- * The `Mina.LocalBlockchain()` method specifies a ledger of accounts and contains logic for updating the ledger.
+ * Compares approaches (see `delegate.ts`):
+ *   - control
+ *   - program
+ *   - merkle
+ * at tasks:
+ *   - compile
+ *   - prove
+ *   - check
  *
- * Please note that this deployment is local and does not deploy to a live network.
- * If you wish to deploy to a live network, please use the zkapp-cli to deploy.
- *
- * To run locally:
- * Build the project: `$ npm run build`
- * Run with node:     `$ node build/src/run.js`.
+ * To build and run against Lightnet: `npm start`.
  */
 import { AccountUpdate, Lightnet, Mina, PrivateKey, fetchAccount } from 'o1js';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
-import { DelegateProgram, DelegationContractData, DelegationOrder, DelegationZkApp, Ecdsa, Secp256k1, UsesDelegationZkApp } from './delegate.js';
+import { DelegateProgram, DelegationContractData, DelegationOrder, DelegationZkApp, Ecdsa, NoOpProgram, Secp256k1, UserZkApp } from './delegate.js';
 
-console.log('Compiling ...');
-console.time('compile');
-await DelegateProgram.compile();
-// await DelegateVerifyProgram.compile();
-// await NoOpProgram.compile();
-await DelegationZkApp.compile();
-await UsesDelegationZkApp.compile();
-console.timeEnd('compile');
+async function measure<R>(name: string, body: () => Promise<R>): Promise<[number, R]> {
+  const start = new Date().valueOf();
+  const r = await body();
+  const duration = (new Date().valueOf() - start) / 1000;
+  console.log(name, ':', duration, 's');
+  return [duration, r];
+}
+
+console.log('compile', '...');
+const forceRecompile = false;
+const [controlCompileTime,] = await measure('NoOpProgram.compile', () => NoOpProgram.compile({ forceRecompile }));
+const [programCompileTime,] = await measure('DelegateProgram.compile', () => DelegateProgram.compile({ forceRecompile }));
+const [merkleCompileTime,] = await measure('DelegationZkApp.compile', () => DelegationZkApp.compile({ forceRecompile }));
+await UserZkApp.compile();
 
 /** Scaling factor from human-friendly MINA amount to raw integer fee amount. */
 const MINA_TO_RAW_FEE = 1_000_000_000;
@@ -41,49 +48,44 @@ try {
   // Connect to localhost Lightnet
   lightnetAccount = await Lightnet.acquireKeyPair({ lightnetAccountManagerEndpoint });
   const { publicKey: sender, privateKey: senderKey } = lightnetAccount;
-
   await Mina.waitForFunding(sender.toBase58());
-  console.log('Sender balance:', Mina.activeInstance.getAccount(sender).balance.toBigInt());
 
   // ----------------------------------------------------------------------------
+  // Set up the delegation order we are going to be proving.
   const viemAccount = privateKeyToAccount(generatePrivateKey());
   const delegationOrder = new DelegationOrder({
     target: sender,
     signer: Secp256k1.fromHex(viemAccount.publicKey),
   });
-
+  // Sign the order with our EVM wallet. Like a user would be prompted to do.
   const delegationSignature = Ecdsa.fromHex(await viemAccount.signMessage({ message: { raw: delegationOrder.bytesToSign() } }));
 
-  console.time('DelegateProgram.sign');
-  const delegateProof = await DelegateProgram.sign(
-    delegationOrder,
-    delegationSignature,
+  const delegationContractData = new DelegationContractData();
+
+  // ----------------------------------------------------------------------------
+  // control prove
+  const controlProveTime = await measure('NoOpProgram.doNothing', () => NoOpProgram.doNothing());
+
+  // ----------------------------------------------------------------------------
+  // program prove
+  const [programProveTime, delegateProof] = await measure('DelegateProgram.sign', () =>
+    DelegateProgram.sign(
+      delegationOrder,
+      delegationSignature,
+    )
   );
-  console.timeEnd('DelegateProgram.sign');
 
-  console.time('DelegateProgram.verify');
-  console.log(await DelegateProgram.verify(delegateProof));
-  console.timeEnd('DelegateProgram.verify');
+  await measure('DelegateProgram.verify', () => DelegateProgram.verify(delegateProof));
 
-  /*
-  console.time('DelegateVerifyProgram.check');
-  await DelegateVerifyProgram.check(delegateProof);
-  console.timeEnd('DelegateVerifyProgram.check');
-
-  console.time('NoOpProgram.blah');
-  await NoOpProgram.blah(delegateProof.publicInput);
-  console.timeEnd('NoOpProgram.blah');
-  */
-
+  // ----------------------------------------------------------------------------
+  // deploy contracts
   const delegationKeys = PrivateKey.randomKeypair();
   const delegationApp = new DelegationZkApp(delegationKeys.publicKey);
 
   const userKeys = PrivateKey.randomKeypair();
-  const userApp = new UsesDelegationZkApp(userKeys.publicKey);
+  const userApp = new UserZkApp(userKeys.publicKey);
 
-  // deploy contracts
-  console.time('deploy contracts');
-  {
+  await measure('deploy contracts', async () => {
     const tx = await Mina.transaction(
       {
         sender,
@@ -97,14 +99,28 @@ try {
     );
     await tx.prove();
     await tx.sign([senderKey, delegationKeys.privateKey, userKeys.privateKey]).send().wait();
-  }
-  console.timeEnd('deploy contracts');
+  });
 
-  // time recursive proof method
-  console.log('UsesDelegationZkApp.viaRecursiveProof');
-  console.time('UsesDelegationZkApp.viaRecursiveProof');
-  {
-    console.time('  tx');
+  // ----------------------------------------------------------------------------
+  // control check
+  const [, controlCheckTime] = await measure('UserZkApp.noOp', async () => {
+    const tx = await Mina.transaction(
+      {
+        sender,
+        fee: 0.01 * MINA_TO_RAW_FEE,
+      },
+      async () => {
+        await userApp.noOp();
+      }
+    );
+    const [proveTime,] = await measure('┌ prove', () => tx.prove());
+    await tx.sign([senderKey]).send().wait();
+    return proveTime;
+  });
+
+  // ----------------------------------------------------------------------------
+  // program check
+  const [, programCheckTime] = await measure('UserZkApp.viaRecursiveProof', async () => {
     const tx = await Mina.transaction(
       {
         sender,
@@ -114,29 +130,18 @@ try {
         await userApp.viaRecursiveProof(delegateProof);
       }
     );
-    console.timeEnd('  tx');
-    console.time('  prove');
-    await tx.prove();
-    console.timeEnd('  prove');
-    console.time('  sign and send');
-    const sent = await tx.sign([senderKey, delegationKeys.privateKey, userKeys.privateKey]).send();
-    console.timeEnd('  sign and send');
-    console.time('  wait');
-    await sent.wait();
-    console.timeEnd('  wait');
-  }
-  console.timeEnd('UsesDelegationZkApp.viaRecursiveProof');
+    const [proveTime,] = await measure('┌ prove', () => tx.prove());
+    await tx.sign([senderKey]).send().wait();
+    return proveTime;
+  });
 
-  // insert
-  const data = new DelegationContractData();
-  console.log('DelegationZkApp.delegate');
-  console.time('DelegationZkApp.delegate');
-  {
-    const witness = data.delegate(delegationOrder);
+  // ----------------------------------------------------------------------------
+  // merkle prove
+  const [, merkleProveTime] = await measure('DelegationZkApp.delegate', async () => {
+    const witness = delegationContractData.delegate(delegationOrder);
     if (!witness)
-      throw new Error('derp 1');
+      throw new Error();
 
-    console.time('  tx');
     const tx = await Mina.transaction(
       {
         sender,
@@ -146,33 +151,20 @@ try {
         await delegationApp.delegate(delegationOrder, witness, delegationSignature);
       }
     );
-    console.timeEnd('  tx');
-    console.time('  prove');
-    await tx.prove();
-    console.timeEnd('  prove');
-    console.time('  sign and send');
-    const sent = await tx.sign([senderKey]).send();
-    console.timeEnd('  sign and send');
-    console.time('  wait');
-    await sent.wait();
-    console.timeEnd('  wait');
-  }
-  console.timeEnd('DelegationZkApp.delegate');
+    const [proveTime,] = await measure('┌ prove', () => tx.prove());
+    await tx.sign([senderKey]).send().wait();
+    return proveTime;
+  });
 
-  console.time('treeRoot.fetch');
-  await delegationApp.treeRoot.fetch();
-  await fetchAccount({ publicKey: delegationApp.address });
-  console.timeEnd('treeRoot.fetch');
+  await measure('fetchAccount', () => fetchAccount({ publicKey: delegationApp.address }));
 
-  // read directly
-  console.log('DelegationZkApp.check');
-  console.time('DelegationZkApp.check');
-  {
-    const witness = data.check(delegationOrder);
+  // ----------------------------------------------------------------------------
+  // merkle check
+  await measure('DelegationZkApp.check', async () => {
+    const witness = delegationContractData.check(delegationOrder);
     if (!witness)
-      throw new Error('derp 2');
+      throw new Error();
 
-    console.time('  tx');
     const tx = await Mina.transaction(
       {
         sender,
@@ -182,28 +174,16 @@ try {
         await delegationApp.check(delegationOrder, witness);
       }
     );
-    console.timeEnd('  tx');
-    console.time('  prove');
-    await tx.prove();
-    console.timeEnd('  prove');
-    console.time('  sign and send');
-    const sent = await tx.sign([senderKey]).send();
-    console.timeEnd('  sign and send');
-    console.time('  wait');
-    await sent.wait();
-    console.timeEnd('  wait');
-  }
-  console.timeEnd('DelegationZkApp.check');
+    await measure('┌ prove', () => tx.prove());
+    await tx.sign([senderKey]).send().wait();
+  });
 
   // read indirectly
-  console.log('UsesDelegationZkApp.viaFriendContract');
-  console.time('UsesDelegationZkApp.viaFriendContract');
-  {
-    const witness = data.check(delegationOrder);
+  const [, merkleCheckTime] = await measure('UserZkApp.viaFriendContract', async () => {
+    const witness = delegationContractData.check(delegationOrder);
     if (!witness)
-      throw new Error('derp 2');
+      throw new Error();
 
-    console.time('  tx');
     const tx = await Mina.transaction(
       {
         sender,
@@ -213,18 +193,13 @@ try {
         await userApp.viaFriendContract(delegationApp.address, delegationOrder, witness);
       }
     );
-    console.timeEnd('  tx');
-    console.time('  prove');
-    await tx.prove();
-    console.timeEnd('  prove');
-    console.time('  sign and send');
-    const sent = await tx.sign([senderKey]).send();
-    console.timeEnd('  sign and send');
-    console.time('  wait');
-    await sent.wait();
-    console.timeEnd('  wait');
-  }
-  console.timeEnd('UsesDelegationZkApp.viaFriendContract');
+    const [proveTime,] = await measure('┌ prove', () => tx.prove());
+    await tx.sign([senderKey]).send().wait();
+    return proveTime;
+  });
+
+  // ----------------------------------------------------------------------------
+  // Summarize results
 
   // ----------------------------------------------------------------------------
   // Disconnect from Lightnet
