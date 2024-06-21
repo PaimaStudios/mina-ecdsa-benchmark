@@ -1,0 +1,20 @@
+services:
+  # Mina lightnet node.
+  mina:
+    image: o1labs/mina-local-network:berkeley-latest-lightnet
+    environment:
+      NETWORK_TYPE: single-node
+      PROOF_LEVEL: none
+      LOG_LEVEL: Info
+      RUN_ARCHIVE_NODE: true
+    ports:
+      - 3085:3085  # Mina GraphQL
+      - 54325:5432  # archive postgres, remapped to not conflict with host pg
+      - 8080:8080
+      - 8181:8181
+      - 8282:8282
+    healthcheck:
+      # based on defaults for https://github.com/o1-labs/wait-for-mina-network-action
+      test: curl -g 'http://localhost:3085/graphql?query={syncStatus}' | grep -q SYNCED
+      interval: 10s
+      retries: 60
