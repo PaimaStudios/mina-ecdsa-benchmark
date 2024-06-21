@@ -63,7 +63,7 @@ try {
 
   // ----------------------------------------------------------------------------
   // control prove
-  const controlProveTime = await measure('NoOpProgram.doNothing', () => NoOpProgram.doNothing());
+  const [controlProveTime,] = await measure('NoOpProgram.doNothing', () => NoOpProgram.doNothing());
 
   // ----------------------------------------------------------------------------
   // program prove
