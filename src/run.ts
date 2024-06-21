@@ -22,12 +22,11 @@ async function measure<R>(name: string, body: () => Promise<R>): Promise<[number
   return [duration, r];
 }
 
-console.log('compile', '...');
 const forceRecompile = false;
 const [controlCompileTime,] = await measure('NoOpProgram.compile', () => NoOpProgram.compile({ forceRecompile }));
 const [programCompileTime,] = await measure('DelegateProgram.compile', () => DelegateProgram.compile({ forceRecompile }));
 const [merkleCompileTime,] = await measure('DelegationZkApp.compile', () => DelegationZkApp.compile({ forceRecompile }));
-await UserZkApp.compile();
+await measure('UserZkApp.compile', () => UserZkApp.compile());
 
 /** Scaling factor from human-friendly MINA amount to raw integer fee amount. */
 const MINA_TO_RAW_FEE = 1_000_000_000;
@@ -200,6 +199,29 @@ try {
 
   // ----------------------------------------------------------------------------
   // Summarize results
+  console.log('---');
+  console.log('Control:', controlCompileTime, '\t', controlProveTime, '\t', controlCheckTime);
+  console.log('Program:', programCompileTime, '\t', programProveTime, '\t', programCheckTime);
+  console.log('Merkle: ', merkleCompileTime, '\t', merkleProveTime, '\t', merkleCheckTime);
+  console.log(
+    'Winner: ',
+    programCompileTime < merkleCompileTime ? 'program' : 'merkle',
+    '\t',
+    programProveTime < merkleProveTime ? 'program' : 'merkle',
+    '\t',
+    programCheckTime < merkleCheckTime ? 'program' : 'merkle',
+  );
+  function margin(a: number, b: number) {
+    return `${Math.round((1 - Math.min(a, b) / Math.max(a, b)) * 1000) / 10}%`;
+  }
+  console.log(
+    'Margin: ',
+    margin(programCompileTime, merkleCompileTime),
+    '\t',
+    margin(programProveTime, merkleProveTime),
+    '\t',
+    margin(programCheckTime, merkleCheckTime),
+  );
 
   // ----------------------------------------------------------------------------
   // Disconnect from Lightnet
