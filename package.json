@@ -7,7 +7,7 @@
     "format": "prettier --write --ignore-unknown **/*",
     "lint": "eslint src/",
     "lint:fix": "npm run lint -- --fix",
-    "prestart": "npm run build && docker compose up --wait",
+    "prestart": "npm install --silent && npm run build && docker compose up --wait",
     "start": "node --enable-source-maps build/src/run.js"
   },
   "dependencies": {
