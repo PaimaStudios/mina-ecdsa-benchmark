@@ -200,28 +200,35 @@ try {
   // ----------------------------------------------------------------------------
   // Summarize results
   console.log('---');
-  console.log('Control:', controlCompileTime, '\t', controlProveTime, '\t', controlCheckTime);
-  console.log('Program:', programCompileTime, '\t', programProveTime, '\t', programCheckTime);
-  console.log('Merkle: ', merkleCompileTime, '\t', merkleProveTime, '\t', merkleCheckTime);
-  console.log(
-    'Winner: ',
-    programCompileTime < merkleCompileTime ? 'program' : 'merkle',
-    '\t',
-    programProveTime < merkleProveTime ? 'program' : 'merkle',
-    '\t',
-    programCheckTime < merkleCheckTime ? 'program' : 'merkle',
-  );
   function margin(a: number, b: number) {
-    return `${Math.round((1 - Math.min(a, b) / Math.max(a, b)) * 1000) / 10}%`;
+    return `${((1 - Math.min(a, b) / Math.max(a, b)) * 100).toFixed(1)}%`;
   }
-  console.log(
-    'Margin: ',
-    margin(programCompileTime, merkleCompileTime),
-    '\t',
-    margin(programProveTime, merkleProveTime),
-    '\t',
-    margin(programCheckTime, merkleCheckTime),
-  );
+  const table = [
+    ['Control:', controlCompileTime.toFixed(2), controlProveTime.toFixed(2), controlCheckTime.toFixed(2)],
+    ['Program:', programCompileTime.toFixed(2), programProveTime.toFixed(2), programCheckTime.toFixed(2)],
+    ['Merkle:', merkleCompileTime.toFixed(2), merkleProveTime.toFixed(2), merkleCheckTime.toFixed(2)],
+    [
+      'Winner:',
+      programCompileTime < merkleCompileTime ? 'program' : 'merkle',
+      programProveTime < merkleProveTime ? 'program' : 'merkle',
+      programCheckTime < merkleCheckTime ? 'program' : 'merkle',
+    ],
+    [
+      'Margin:',
+      margin(programCompileTime, merkleCompileTime),
+      margin(programProveTime, merkleProveTime),
+      margin(programCheckTime, merkleCheckTime),
+    ],
+  ];
+  const widths: number[] = [];
+  for (const row of table) {
+    for (let i = 0; i < row.length; ++i) {
+      widths[i] = Math.max(widths[i] ?? 0, String(row[i]).length);
+    }
+  }
+  for (const row of table) {
+    console.log(...row.map((e, i) => String(e).padStart(widths[i], ' ')));
+  }
 
   // ----------------------------------------------------------------------------
   // Disconnect from Lightnet
