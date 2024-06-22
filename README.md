@@ -13,5 +13,23 @@ In common:
 
 Differences:
 
-1. `program`: A ZkProgram is used to represent the proof of the ECDSA signature verification, and the proof of that program is passed to the zkApp contracts as a recursive proof. This approach is simplest but the ECDSA circuit is recursively verified every time.
-2. `merkle`: A zkApp uses an o1js `MerkleMap` (Merkle tree of depth 256) to remember the set of all delegation orders that have been verified. Inserts to this map check the ECDSA signature of the submitted order. The 'user' zkApp then accepts a `MerkleWitness` instead of a recursive proof and makes a contract-to-contract call to query whether that witness describes a delegation order whose signature was previously verified. This approach requires the delegation contract's full history to be pulled from an archive node before being able to make inserts or queries.
+We propose two options:
+1. `merkle` delegation info is stored onchain as a `MerkleMap` in a ZkApp for other ZkApps to query (recall: function calls to other ZkApps works similar to `ZkProgram` under the hood)
+2. `program` where delegation is inlined as a `ZkProgram` manually and no persistant mapping is stored
+
+# Benchmark
+
+There are 2 steps:
+1. `Setup`: only needs to be performed once
+
+| Type    | Step   | Time   | Note                                                                                                     |
+|---------|--------|--------|----------------------------------------------------------------------------------------------------------|
+| Program | Setup  | \~60s    | Can be cached in localstorage for re-use later                                                           |
+| Merkle  | Setup  | 50\~60s | Result stored onchain. Not including network overhead to fetch the Merkle map state from the network in order to construct the proof |
+
+2. `Verify`: needs to be performed every time
+
+| Type    | Step   | Time   | Note                                                                                                     |
+|---------|--------|--------|----------------------------------------------------------------------------------------------------------|
+| Program | Verify | \~2s    |                                                                                                          |
+| Merkle  | Verify | 10\~15s | Not including network overhead to fetch the Merkle map state from the network in order to construct the proof |
