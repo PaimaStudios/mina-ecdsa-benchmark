@@ -10,7 +10,7 @@
  *
  * To build and run against Lightnet: `npm start`.
  */
-import { AccountUpdate, Lightnet, Mina, PrivateKey, fetchAccount } from 'o1js';
+import { Cache, AccountUpdate, Lightnet, Mina, PrivateKey, fetchAccount, CacheHeader } from 'o1js';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import { DelegateProgram, DelegationContractData, DelegationOrder, DelegationZkApp, Ecdsa, NoOpProgram, Secp256k1, UserZkApp } from './delegate.js';
 
@@ -23,10 +23,74 @@ async function measure<R>(name: string, body: () => Promise<R>): Promise<[number
 }
 
 const forceRecompile = false;
-const [controlCompileTime,] = await measure('NoOpProgram.compile', () => NoOpProgram.compile({ forceRecompile }));
-const [programCompileTime,] = await measure('DelegateProgram.compile', () => DelegateProgram.compile({ forceRecompile }));
-const [merkleCompileTime,] = await measure('DelegationZkApp.compile', () => DelegationZkApp.compile({ forceRecompile }));
-await measure('UserZkApp.compile', () => UserZkApp.compile());
+const simulateCacheMiss = true;
+
+class TimingCache implements Cache {
+  inner: Cache;
+  lastTime: number;
+  timings: Map<string, number>;
+
+  constructor(inner: Cache) {
+    this.inner = inner;
+    this.lastTime = new Date().valueOf();
+    this.timings = new Map();
+  }
+
+  read(header: CacheHeader): Uint8Array | undefined {
+    this.time('read');
+    if (simulateCacheMiss)
+      return undefined;
+    const r = this.inner.read(header);
+    this.time('fs');
+    return r;
+  }
+
+  write(header: CacheHeader, value: Uint8Array): void {
+    this.time('write');
+    const r = this.inner.write(header, value);
+    this.time('fs');
+    return r;
+  }
+
+  get canWrite(): boolean { return this.inner.canWrite; }
+
+  debug?: boolean | undefined = false;
+
+  time(key: string) {
+    const now = new Date().valueOf();
+    const diff = now - this.lastTime;
+    this.timings.set(key, (this.timings.get(key) ?? 0) + diff);
+    this.lastTime = now;
+  }
+
+  printTimes() {
+    if (this.timings.has('read'))
+      console.log('├ key calculation', ':', this.timings.get('read')! / 1000, 's');
+    if (this.timings.has('write'))
+      console.log('├ cacheable', ':', this.timings.get('write')! / 1000, 's');
+    console.log('└ fs', ':', this.timings.get('fs')! / 1000, 's');
+  }
+}
+
+async function measureCompile(p: {
+  name: string;
+  compile: (_: {
+    cache?: Cache | undefined;
+    forceRecompile?: boolean | undefined;
+  }) => Promise<unknown>;
+}) {
+  const cache = new TimingCache(Cache.FileSystemDefault);
+  const result = await measure(`${p.name}.compile`, () =>
+    p.compile({ cache, forceRecompile })
+  );
+  cache.printTimes();
+  return result;
+}
+
+const [controlCompileTime,] = await measureCompile(NoOpProgram);
+const [programCompileTime,] = await measureCompile(DelegateProgram);
+const [merkleCompileTime,] = await measureCompile(DelegationZkApp);
+await measureCompile(UserZkApp);
 
 /** Scaling factor from human-friendly MINA amount to raw integer fee amount. */
 const MINA_TO_RAW_FEE = 1_000_000_000;
@@ -204,6 +268,7 @@ try {
     return `${((1 - Math.min(a, b) / Math.max(a, b)) * 100).toFixed(1)}%`;
   }
   const table = [
+    ['', 'Compile', 'Prove', 'Check'],
     ['Control:', controlCompileTime.toFixed(2), controlProveTime.toFixed(2), controlCheckTime.toFixed(2)],
     ['Program:', programCompileTime.toFixed(2), programProveTime.toFixed(2), programCheckTime.toFixed(2)],
     ['Merkle:', merkleCompileTime.toFixed(2), merkleProveTime.toFixed(2), merkleCheckTime.toFixed(2)],
