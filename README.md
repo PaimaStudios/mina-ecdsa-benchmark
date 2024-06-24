@@ -14,22 +14,32 @@ In common:
 Differences:
 
 We propose two options:
-1. `merkle` delegation info is stored onchain as a `MerkleMap` in a ZkApp for other ZkApps to query (recall: function calls to other ZkApps works similar to `ZkProgram` under the hood)
-2. `program` where delegation is inlined as a `ZkProgram` manually and no persistant mapping is stored
+1. **Merkle** delegation info is stored onchain as a `MerkleMap` in a ZkApp for other ZkApps to query (recall: function calls to other ZkApps works similar to `ZkProgram` under the hood)
+2. **Program** where delegation is inlined as a `ZkProgram` manually and no persistant mapping is stored
 
-# Benchmark
+## Results
 
 There are 2 steps:
-1. `Setup`: only needs to be performed once
 
-| Type    | Step   | Time   | Note                                                                                                     |
-|---------|--------|--------|----------------------------------------------------------------------------------------------------------|
-| Program | Setup  | \~60s    | Can be cached in localstorage for re-use later                                                           |
-| Merkle  | Setup  | 50\~60s | Result stored onchain. Not including network overhead to fetch the Merkle map state from the network in order to construct the proof |
+1. **Setup**: only needs to be performed once
 
-2. `Verify`: needs to be performed every time
+    | Type    | Step   | Time   | Note                                                                                                     |
+    |---------|--------|--------|----------------------------------------------------------------------------------------------------------|
+    | Program | Setup  | \~60s  | Can be cached in localstorage for re-use later                                                           |
+    | Merkle  | Setup  | 50\~60s | Result stored onchain. Not including network overhead to fetch the Merkle map state from the network in order to construct the proof |
 
-| Type    | Step   | Time   | Note                                                                                                     |
-|---------|--------|--------|----------------------------------------------------------------------------------------------------------|
-| Program | Verify | \~2s    |                                                                                                          |
-| Merkle  | Verify | 10\~15s | Not including network overhead to fetch the Merkle map state from the network in order to construct the proof |
+2. **Verify**: needs to be performed every time
+
+    | Type    | Step   | Time   | Note                                                                                                     |
+    |---------|--------|--------|----------------------------------------------------------------------------------------------------------|
+    | Program | Verify | \~2s    |                                                                                                          |
+    | Merkle  | Verify | 10\~15s | Not including network overhead to fetch the Merkle map state from the network in order to construct the proof |
+
+## Compile times
+
+Does not include compile time of the "user" ZkApp.
+
+| Type    | Non-cacheable time | Cacheable time | Note
+| ------- | ------------------ | -------------- | ----
+| Program | ~16s               | ~85s           | ZkProgram includes method for Setup step only
+| Merkle  | ~22s               | ~35s           | ZkApp includes methods for both Setup and Verify steps
