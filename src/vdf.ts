@@ -1,0 +1,171 @@
+import { Field, Provable, Struct, verify } from "o1js";
+import { Big } from "./bigint.js";
+
+// NB: Bigint2048 uses 18 limbs of 116 bits, so actually 2088 bits
+
+export class ClassGroup extends Struct({
+  a: Big,
+  b: Big,
+  c: Big,
+  abs_discriminant: Big,
+}) {
+  static from_ab_discriminant(
+    a: Big,
+    b: Big,
+    abs_discriminant: Big
+  ): ClassGroup {
+    let four_a = a.mul(Big.from(4n));
+    let c = b.square().add(abs_discriminant).floorDiv(four_a).q;
+    return new ClassGroup({
+      a,
+      b,
+      c,
+      abs_discriminant,
+    });
+  }
+
+  identity(): ClassGroup {
+    return ClassGroup.from_ab_discriminant(
+      Big.from(1n),
+      Big.from(1n),
+      this.abs_discriminant
+    );
+  }
+
+  mul(rhs: ClassGroup): ClassGroup {
+    throw new Error("TODO");
+  }
+
+  pow(exponent: Big) {
+    const bits = exponent.toBits();
+    let result = this.identity();
+    let squares: ClassGroup = this;
+    for (let i = 0; i < bits.length; ++i) {
+      result = new ClassGroup(
+        Provable.if(bits[i], ClassGroup, result.mul(squares), result)
+      );
+      squares = squares.mul(squares);
+    }
+    return result;
+  }
+
+  assertEquals(other: ClassGroup) {
+    this.a.assertEquals(other.a);
+    this.b.assertEquals(other.b);
+    this.c.assertEquals(other.c);
+    this.abs_discriminant.assertEquals(other.abs_discriminant);
+  }
+}
+
+function iterations(n: Field): Field {
+  n.isEven().assertTrue();
+  n.assertGreaterThanOrEqual(66);
+  return n;
+}
+
+function verify_proof(
+  x_initial: ClassGroup,
+  y_initial: ClassGroup,
+  // proof: [ClassGroup],
+  t: 66,
+  delta: 8,
+  int_size_bits: 2048
+) {
+  let one = Big.from(1n);
+  let x = x_initial,
+    y = y_initial;
+  const final_t = /*calculate_final_t(t, delta)*/ Field.from(66);
+  let curr_t = t;
+  /*
+  for mut mu in proof {
+      assert!(
+          curr_t & 1 == 0,
+          "Cannot have an odd number of iterations remaining"
+      );
+      let r = generate_r_value(x_initial, y_initial, &mu, int_size_bits);
+      x.pow(r.clone());
+      x *= &mu;
+      mu.pow(r);
+      y *= &mu;
+
+      curr_t >>= 1;
+      if curr_t & 1 != 0 {
+          curr_t += 1;
+          y.square();
+      }
+  }
+  */
+  x = x.pow(Big.from(2n).powField(final_t));
+  x.assertEquals(y);
+}
+
+// -----
+
+const DISCRIM =
+  -24228060564511477349613339479634919950209588440696257803171456565253563299983198603436121330822250668432017385422825824154090411853407052180323175664580069695941798350949696881663573348807799592273998567848064309017636791412629798531437224194678722666041888834431244875329287293246477523833433673235627253932246111509923499301664279970109462984112665297280224895352497800955489308398972415210642933464045269471701380157533747615162999324493337460278589951876955759989582725021518941157322421083579504913335298149341834850624921552609745849437458053286202165933223585892299326791237543698799834351583392324034554613383n;
+const abs_discriminant = Big.from(-DISCRIM);
+const x = ClassGroup.from_ab_discriminant(
+  Big.from(2n),
+  Big.from(1n),
+  abs_discriminant
+);
+const y = ClassGroup.from_ab_discriminant(
+  Big.from(
+    59576696351952559275592945079114350552133214487591270591174601391899368111955331008048215851184852944448956460391731540394728853605370928502791914688002281773372235790219123934231281825313668037016698751235403223066893874174926709472545797298289171530866204386639118276889578752279805633602698317048892624964n
+  ),
+  Big.from(
+    49705023895155171874413533727920734887198151021192242711896902086741152730677009524086865738896662102553259593551321876946558962100934498978733197472770667891769258425174956045332713900306636431118547499973435272251043018608128534245012134046083991032893513092764367939451401518125790463593517492763173286307n
+  ),
+  abs_discriminant
+);
+if (
+  x.c.toBigInt() !=
+  3028507570563934668701667434954364993776198555087032225396432070656695412497899825429515166352781333554002173177853228019261301481675881522540396958072508711992724793868712110207946668600974949034249820981008038627204598926578724816429653024334840333255236104303905609416160911655809690479179209154453406741530763938740437412708034996263682873014083162160028111919062225119436163549871551901330366683005658683962672519691718451895374915561667182534823743984619469998697840627689867644665302635447438114166912268667729356328115194076218231179682256660775270741652948236537415848904692962349979293947924040504319326673n
+)
+  throw new Error("test failure");
+if (
+  y.c.toBigInt() !=
+  112034787088586214101203170714936517387492909208449343725372456995279878846653427003676824531132487450750406758624430994677561232244341709896165198841100497900860235742388726572513223617566233417800081406737185112583862165589470392500913553587414315306869042493031716133037209185504841774244373294533761390197n
+)
+  throw new Error("test failure");
+
+verify_proof(x, y, 66, 8, 2048);
+
+/*
+function check_proof_of_time_pietrzak<T>(
+  challenge: &[u8],
+  proof_blob: &[u8],
+  iterations: u64,
+  length_in_bits: u16,
+) {
+  //let discriminant = super::create_discriminant::create_discriminant(challenge, length_in_bits);
+  let discriminant = Bigint2048.from(-19015921440027910171036068802597430939693703996118413527767102590249008349916629480868085648760009772147519045569951289314665271568350658916113398841426981970076771504886060421190614806082084033621623636991520374060484771449925521706758791232710954355755827039670134636118927901613899482156904074438624342930911860363013005717248159718717923768085859665831991474496451079562087545183251088607111618746935139500328069667457772422505684083137319105424741847212717912378341286652879229857422465388154149290398067975862193379380632099975577262965324865581421954968621989444247443508976019866651695668483505260431252816247n);
+  let x = T::from_ab_discriminant(2.into(), 1.into(), discriminant);
+  let iterations = Iterations::new(iterations).map_err(|_| super::InvalidProof)?;
+  if usize::MAX - 16 < length_in_bits.into() {
+      // Proof way too long.
+      return Err(super::InvalidProof);
+  }
+  let length: usize = (usize::from(length_in_bits) + 16usize) >> 4;
+  if proof_blob.len() < 2 * length {
+      // Invalid length of proof
+      return Err(super::InvalidProof);
+  }
+  let result_bytes = &proof_blob[..length * 2];
+  let proof_bytes = &proof_blob[length * 2..];
+  let discriminant = x.discriminant().clone();
+  let proof =
+      deserialize_proof(proof_bytes, &discriminant, length).map_err(|()| super::InvalidProof)?;
+  let y = T::from_bytes(result_bytes, discriminant);
+  verify_proof(
+      &x,
+      &y,
+      proof,
+      iterations,
+      8,
+      //&generate_r_value,
+      length_in_bits.into(),
+  )
+  .map_err(|()| super::InvalidProof)
+}
+*/
