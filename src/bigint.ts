@@ -6,7 +6,8 @@ const LIMB_BITS = 116;
 // Increase this to make Big bigger.
 const LIMB_NUM = 36;
 
-const MASK = (1n << BigInt(LIMB_BITS)) - 1n;
+const MODULUS = 1n << BigInt(LIMB_BITS);
+const MASK = MODULUS - 1n;
 
 const Limbs = Provable.Array(Field, LIMB_NUM);
 
@@ -84,6 +85,27 @@ export class Big extends Struct({
     });
   }
 
+  sub(y: Big): Big {
+    console.log(this.toBigInt(), "-", y.toBigInt());
+    y.assertLessThanOrEqual(this);
+
+    let fields = Limbs.empty();
+    let carry = Bool(false);
+
+    for (let i = 0; i < LIMB_NUM; i++) {
+      fields[i] = this.fields[i].sub(y.fields[i]).sub(carry.toField());
+      carry = fields[i].greaterThan(MASK);
+      fields[i] = Provable.if(carry, Field, fields[i].add(MODULUS), fields[i]);
+    }
+
+    carry.assertFalse();
+    // TODO: is this Unconstrained correct?
+    return new Big({
+      fields,
+      value: Unconstrained.from(this.value.get() - y.value.get()),
+    });
+  }
+
   mul(y: Big): Big {
     return Big.MAX.modMul(this, y);
   }
@@ -100,14 +122,24 @@ export class Big extends Struct({
       return { q: Big.from(q), r: Big.from(r) };
     });
 
-    q.assertLessThan(this);
+    console.log(
+      this.toBigInt(),
+      "=",
+      q.toBigInt(),
+      "*",
+      y.toBigInt(),
+      "+",
+      r.toBigInt()
+    );
+
+    q.assertLessThanOrEqual(this);
     r.assertLessThan(y);
-    r.assertLessThan(this);
+    r.assertLessThanOrEqual(this);
     y.mul(q).add(r).assertEquals(this);
     return { q, r };
   }
 
-  powField(exponent: Field) {
+  powField(exponent: Field): Big {
     const bits = exponent.toBits();
     let result = Big.from(1n);
     let squares: Big = this;
@@ -116,6 +148,10 @@ export class Big extends Struct({
       squares = squares.mul(squares);
     }
     return result;
+  }
+
+  gcd(other: Big): Big {
+    throw new Error('TODO');
   }
 
   // --------------------------------------------------------------------------
@@ -162,8 +198,16 @@ export class Big extends Struct({
     return state;
   }
 
+  equals(other: Big): Bool {
+    return this.cmp(other).equals(Ordering.Equal);
+  }
+
   assertLessThan(other: Big): void {
     this.cmp(other).assertEquals(Ordering.Less);
+  }
+
+  assertLessThanOrEqual(other: Big): void {
+    this.cmp(other).assertNotEquals(Ordering.Greater);
   }
 
   assertEquals(other: Big): void {
