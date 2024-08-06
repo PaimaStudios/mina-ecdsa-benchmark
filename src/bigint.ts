@@ -36,7 +36,9 @@ export class Big extends Struct({
     return new Big({ fields, value: Unconstrained.from(value) });
   }
 
-  static MAX = Big.from((1n << BigInt(LIMB_BITS * LIMB_NUM)) - 1n);
+  static readonly MAX = Big.from((1n << BigInt(LIMB_BITS * LIMB_NUM)) - 1n);
+  static readonly ZERO = Big.from(0n);
+  static readonly ONE = Big.from(1n);
 
   static check(x: { fields: Field[] }) {
     for (let i = 0; i < LIMB_NUM; i++) {
@@ -150,8 +152,32 @@ export class Big extends Struct({
     return result;
   }
 
-  gcd(other: Big): Big {
-    throw new Error('TODO');
+  gcd(b: Big): Big {
+    let solved = Bool(false);
+    let result = Big.ZERO;
+    let a: Big = this;
+    for (let i = 0; i < 20; ++i) {
+      // if b == 0, return a
+      const bZero = b.equals(Big.ZERO);
+      const bNewlySolved = solved.not().and(bZero);
+      solved = solved.or(bNewlySolved);
+      result = new Big(Provable.if(bNewlySolved, Big, a, result));
+
+      // a %= b
+      a = a.floorDiv(new Big(Provable.if(bZero, Big, Big.ONE, b))).r;
+
+      // if a == 0, return b
+      const aZero = a.equals(Big.ZERO);
+      const aNewlySolved = solved.not().and(aZero);
+      solved = solved.or(aNewlySolved);
+      result = new Big(Provable.if(aNewlySolved, Big, b, result));
+
+      // b %= a
+      b = b.floorDiv(new Big(Provable.if(aZero, Big, Big.ONE, a))).r;
+    }
+    solved.assertTrue();
+    console.log('gcd(', this.toBigInt(), ',', b.toBigInt(), ')=', result.toBigInt());
+    return result;
   }
 
   // --------------------------------------------------------------------------

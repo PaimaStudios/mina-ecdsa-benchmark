@@ -54,6 +54,7 @@ export class ClassGroup extends Struct({
     console.log("h=", h.toBigInt());
     // w = gcd(a1, a2, g)
     const w = this.a.gcd(rhs.a).gcd(g);
+    console.log('w=', w.toBigInt());
     // j = w
     const j = w;
     // s = a1/w
@@ -65,6 +66,8 @@ export class ClassGroup extends Struct({
     // a = t*u
     let a = t.mul(u);
     // b = h*u - s*c1
+    console.log('s=', s.toBigInt());
+    console.log('c=', this.c.toBigInt());
     let b = h.mul(u).sub(s.mul(this.c));
     // m = s*t
     let m = s.mul(t);
