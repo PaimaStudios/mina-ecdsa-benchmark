@@ -17,20 +17,20 @@ export class ClassGroup extends Struct({
   a: Big,
   b: Big,
   c: Big,
-  abs_discriminant: Big,
+  discriminant: Big,
 }) {
   static from_ab_discriminant(
     a: Big,
     b: Big,
-    abs_discriminant: Big
+    discriminant: Big
   ): ClassGroup {
     let four_a = a.mul(Big.from(4n));
-    let c = b.square().add(abs_discriminant).floorDiv(four_a).q;
+    let c = b.square().sub(discriminant).floorDiv(four_a).q;
     return new ClassGroup({
       a,
       b,
       c,
-      abs_discriminant,
+      discriminant: discriminant,
     });
   }
 
@@ -38,7 +38,7 @@ export class ClassGroup extends Struct({
     return ClassGroup.from_ab_discriminant(
       Big.from(1n),
       Big.from(1n),
-      this.abs_discriminant
+      this.discriminant
     );
   }
 
@@ -98,7 +98,7 @@ export class ClassGroup extends Struct({
       a,
       b,
       c,
-      abs_discriminant: this.abs_discriminant,
+      discriminant: this.discriminant,
     });
   }
 
@@ -123,6 +123,6 @@ export class ClassGroup extends Struct({
     this.a.assertEquals(other.a);
     this.b.assertEquals(other.b);
     this.c.assertEquals(other.c);
-    this.abs_discriminant.assertEquals(other.abs_discriminant);
+    this.discriminant.assertEquals(other.discriminant);
   }
 }

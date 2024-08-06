@@ -22,3 +22,7 @@ test("five squared", () => {
   expect(Big.from(5n).square().toBigInt()).toBe(25n);
   expect(Big.from(-5n).square().toBigInt()).toBe(25n);
 });
+
+test("floor div", () => {
+  expect(Big.from(50n).floorDiv(Big.from(13n))).toEqual({ q: Big.from(3n), r: Big.from(11n) });
+});

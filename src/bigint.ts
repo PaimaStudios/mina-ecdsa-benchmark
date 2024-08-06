@@ -165,16 +165,6 @@ export class Big extends Struct({
       return { q: Big.from(q), r: Big.from(r) };
     });
 
-    console.log(
-      this.toBigInt(),
-      "=",
-      q.toBigInt(),
-      "*",
-      y.toBigInt(),
-      "+",
-      r.toBigInt()
-    );
-
     q.assertLessThanOrEqual(this);
     r.assertLessThan(y);
     r.assertLessThanOrEqual(this);
