@@ -1,4 +1,4 @@
-import { Big } from "./bigint";
+import { Big } from "./bigint.js";
 
 test("two plus two", () => {
   expect(Big.from(2n).add(Big.from(2n)).toBigInt()).toBe(4n);

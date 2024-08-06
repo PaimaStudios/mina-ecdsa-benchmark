@@ -9,7 +9,8 @@
     "lint:fix": "npm run lint -- --fix",
     "prestart": "npm install --silent && npm run build && docker compose up --wait",
     "start": "node --enable-source-maps build/src/run.js",
-    "test": "jest"
+    "pretest": "npm run build",
+    "test": "node --experimental-vm-modules node_modules/.bin/jest build/"
   },
   "dependencies": {
     "o1js": "^1.6.0",
@@ -22,7 +23,6 @@
     "eslint-plugin-o1js": "^0.4.0",
     "jest": "^29.7.0",
     "prettier": "^3.2.4",
-    "ts-jest": "^29.2.4",
     "typescript": "^5.3.3"
   },
   "engines": {
