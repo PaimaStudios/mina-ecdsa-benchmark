@@ -1,5 +1,5 @@
 // ----------------------------------------------------------------------------
-import { Bool, Field, Gadgets, Provable, Struct, Unconstrained } from "o1js";
+import { Bool, Field, Gadgets, Provable, Struct } from "o1js";
 
 // Should be kept less than half of Mina's 254 to make carry easy to handle.
 const LIMB_BITS = 116;
@@ -18,22 +18,30 @@ enum Ordering {
 }
 
 export class Big extends Struct({
+  negative: Bool,
   // Little-endian: [0] is least significant, [17] is most significant
   fields: Limbs,
-  value: Unconstrained.withEmpty(0n),
 }) {
   // --------------------------------------------------------------------------
   // Get in & out of provable world
 
   static from(x: bigint) {
+    const negative = x < 0n;
+    if (negative) {
+      x = -x;
+    }
+
     let fields = [];
     let value = x;
     for (let i = 0; i < LIMB_NUM; i++) {
       fields.push(Field(x & MASK));
       x >>= BigInt(LIMB_BITS);
     }
-    if (x !== 0n && x !== -1n) throw new Error("leftover: " + x);
-    return new Big({ fields, value: Unconstrained.from(value) });
+    if (x !== 0n) throw new Error("leftover: " + x);
+    return new Big({
+      negative: Bool(negative),
+      fields,
+    });
   }
 
   static readonly MAX = Big.from((1n << BigInt(LIMB_BITS * LIMB_NUM)) - 1n);
@@ -47,7 +55,15 @@ export class Big extends Struct({
   }
 
   toBigInt(): bigint {
-    return this.value.get();
+    let value = 0n;
+    for (let i = LIMB_NUM - 1; i >= 0; i--) {
+      value <<= BigInt(LIMB_BITS);
+      value += this.fields[i].toBigInt();
+    }
+    if (this.negative.toBoolean()) {
+      value = -value;
+    }
+    return value;
   }
 
   // --------------------------------------------------------------------------
@@ -64,56 +80,80 @@ export class Big extends Struct({
   // --------------------------------------------------------------------------
   // Bignum math
 
-  add(y: Big): Big {
-    let fields = Limbs.empty();
+  abs(): Big {
+    return new Big({
+      negative: Bool(false),
+      fields: this.fields,
+    });
+  }
+
+  neg(): Big {
+    return new Big({
+      negative: this.negative.not(),
+      fields: this.fields,
+    });
+  }
+
+  add(rhs: Big): Big {
+    // same sign:
+    //   X + y = x + y
+    //   -x + -y = -(x + y)
+    // different sign:
+    //   Big - Small = +
+    //   Small - Big = -
+    //   -Big + Small = -
+    //   -Small + Big = +
+    const isSub = this.negative.equals(rhs.negative).not();
+    const resultNegative = this.negative.equals(this.greaterThan(rhs));
+
+    const addFields = Limbs.empty();
     let carry = Bool(false);
 
     for (let i = 0; i < LIMB_NUM; i++) {
-      fields[i] = this.fields[i].add(y.fields[i]).add(carry.toField());
-      carry = fields[i].greaterThan(MASK);
-      fields[i] = Provable.if(
+      addFields[i] = this.fields[i].add(rhs.fields[i]).add(carry.toField());
+      carry = addFields[i].greaterThan(MASK);
+      addFields[i] = Provable.if(
         carry,
         Field,
-        fields[i].sub(MASK + 1n),
-        fields[i]
+        addFields[i].sub(MODULUS),
+        addFields[i]
       );
     }
+    //carry.assertFalse();
 
-    carry.assertFalse();
-    // TODO: is this Unconstrained correct?
+    const subFields = Limbs.empty();
+    carry = Bool(false);
+    for (let i = 0; i < LIMB_NUM; i++) {
+      subFields[i] = this.fields[i].sub(rhs.fields[i]).sub(carry.toField());
+      carry = subFields[i].greaterThan(MASK);
+      subFields[i] = Provable.if(
+        carry,
+        Field,
+        subFields[i].add(MODULUS),
+        subFields[i]
+      );
+    }
+    //carry.assertTrue();
+
     return new Big({
-      fields,
-      value: Unconstrained.from(this.value.get() + y.value.get()),
+      negative: resultNegative,
+      fields: Provable.if(isSub, Limbs, subFields, addFields),
     });
   }
 
   sub(y: Big): Big {
-    console.log(this.toBigInt(), "-", y.toBigInt());
-    y.assertLessThanOrEqual(this);
-
-    let fields = Limbs.empty();
-    let carry = Bool(false);
-
-    for (let i = 0; i < LIMB_NUM; i++) {
-      fields[i] = this.fields[i].sub(y.fields[i]).sub(carry.toField());
-      carry = fields[i].greaterThan(MASK);
-      fields[i] = Provable.if(carry, Field, fields[i].add(MODULUS), fields[i]);
-    }
-
-    carry.assertFalse();
-    // TODO: is this Unconstrained correct?
-    return new Big({
-      fields,
-      value: Unconstrained.from(this.value.get() - y.value.get()),
-    });
+    return this.add(y.neg());
   }
 
   mul(y: Big): Big {
-    return Big.MAX.modMul(this, y);
+    return new Big({
+      negative: this.negative.equals(y.negative).not(),
+      fields: Big.MAX.modMul(this.abs(), y.abs()).fields,
+    });
   }
 
   square(): Big {
-    return Big.MAX.modSquare(this);
+    return Big.MAX.modSquare(this.abs());
   }
 
   floorDiv(y: Big): { q: Big; r: Big } {
@@ -176,7 +216,14 @@ export class Big extends Struct({
       b = b.floorDiv(new Big(Provable.if(aZero, Big, Big.ONE, a))).r;
     }
     solved.assertTrue();
-    console.log('gcd(', this.toBigInt(), ',', b.toBigInt(), ')=', result.toBigInt());
+    console.log(
+      "gcd(",
+      this.toBigInt(),
+      ",",
+      b.toBigInt(),
+      ")=",
+      result.toBigInt()
+    );
     return result;
   }
 
@@ -195,6 +242,7 @@ export class Big extends Struct({
   // Comparisons and asserts
 
   cmp(other: Big): Field /* in Ordering */ {
+    // Handle absolute value
     let state = Field(Ordering.Equal);
     for (let i = LIMB_NUM - 1; i >= 0; --i) {
       state = Provable.switch(
@@ -221,11 +269,64 @@ export class Big extends Struct({
         ]
       );
     }
-    return state;
+    // Handle sign
+    return Provable.switch(
+      [
+        this.negative.and(other.negative.not()),
+        this.negative.not().and(other.negative),
+        this.negative.not().and(other.negative.not()),
+        this.negative.and(other.negative),
+      ],
+      Field,
+      [
+        Field(Ordering.Less), // - < +
+        Field(Ordering.Greater), // + > -
+        // + v + is normal
+        state,
+        // - v - is flipped
+        Provable.switch(
+          [
+            state.equals(Ordering.Less),
+            state.equals(Ordering.Equal),
+            state.equals(Ordering.Greater),
+          ],
+          Field,
+          [Field(Ordering.Greater), Field(Ordering.Equal), Field(Ordering.Less)]
+        ),
+      ]
+    );
   }
 
   equals(other: Big): Bool {
-    return this.cmp(other).equals(Ordering.Equal);
+    // Simpler than cmp()
+    let state = this.negative.equals(other.negative);
+    for (let i = 0; i < LIMB_NUM; ++i) {
+      state = state.and(this.fields[i].equals(other.fields[i]));
+    }
+    return state;
+  }
+
+  lessThan(other: Big): Bool {
+    return this.cmp(other).equals(Ordering.Less);
+  }
+
+  lessThanOrEqual(other: Big): Bool {
+    return this.cmp(other).equals(Ordering.Greater).not();
+  }
+
+  greaterThan(other: Big): Bool {
+    return this.cmp(other).equals(Ordering.Greater);
+  }
+
+  greaterThanOrEqual(other: Big): Bool {
+    return this.cmp(other).equals(Ordering.Less).not();
+  }
+
+  assertEquals(other: Big): void {
+    this.negative.assertEquals(other.negative);
+    for (let i = 0; i < LIMB_NUM; ++i) {
+      this.fields[i].assertEquals(other.fields[i]);
+    }
   }
 
   assertLessThan(other: Big): void {
@@ -236,10 +337,12 @@ export class Big extends Struct({
     this.cmp(other).assertNotEquals(Ordering.Greater);
   }
 
-  assertEquals(other: Big): void {
-    for (let i = 0; i < LIMB_NUM; ++i) {
-      this.fields[i].assertEquals(other.fields[i]);
-    }
+  assertGreaterThan(other: Big): void {
+    this.cmp(other).assertEquals(Ordering.Greater);
+  }
+
+  assertGreaterThanOrEqual(other: Big): void {
+    this.cmp(other).assertNotEquals(Ordering.Less);
   }
 }
 
