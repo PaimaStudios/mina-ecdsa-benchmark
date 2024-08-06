@@ -8,16 +8,20 @@
     "lint": "eslint src/",
     "lint:fix": "npm run lint -- --fix",
     "prestart": "npm install --silent && npm run build && docker compose up --wait",
-    "start": "node --enable-source-maps build/src/run.js"
+    "start": "node --enable-source-maps build/src/run.js",
+    "pretest": "npm run build",
+    "test": "node --enable-source-maps=no --experimental-vm-modules node_modules/.bin/jest build/"
   },
   "dependencies": {
     "o1js": "^1.6.0",
     "viem": "^2.12.0"
   },
   "devDependencies": {
+    "@types/jest": "^29.5.12",
     "@typescript-eslint/eslint-plugin": "^7.13.1",
     "@typescript-eslint/parser": "^7.13.1",
     "eslint-plugin-o1js": "^0.4.0",
+    "jest": "^29.7.0",
     "prettier": "^3.2.4",
     "typescript": "^5.3.3"
   },

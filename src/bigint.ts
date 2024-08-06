@@ -19,7 +19,7 @@ enum Ordering {
 
 export class Big extends Struct({
   negative: Bool,
-  // Little-endian: [0] is least significant, [17] is most significant
+  // Little-endian: [0] is least significant, [LIMB_NUM-1] is most
   fields: Limbs,
 }) {
   // --------------------------------------------------------------------------
@@ -32,7 +32,6 @@ export class Big extends Struct({
     }
 
     let fields = [];
-    let value = x;
     for (let i = 0; i < LIMB_NUM; i++) {
       fields.push(Field(x & MASK));
       x >>= BigInt(LIMB_BITS);
@@ -104,7 +103,8 @@ export class Big extends Struct({
     //   -Big + Small = -
     //   -Small + Big = +
     const isSub = this.negative.equals(rhs.negative).not();
-    const resultNegative = this.negative.equals(this.greaterThan(rhs));
+    const thisSmall = this.abs().lessThan(rhs.abs());
+    const resultNegative = Provable.if(isSub, Bool, rhs.negative.equals(thisSmall), this.negative);
 
     const addFields = Limbs.empty();
     let carry = Bool(false);
@@ -119,12 +119,13 @@ export class Big extends Struct({
         addFields[i]
       );
     }
-    //carry.assertFalse();
+    carry.assertFalse();
 
+    const [bigger, smaller] = Provable.if(thisSmall, Provable.Array(Big, 2), [rhs, this], [this, rhs]);
     const subFields = Limbs.empty();
     carry = Bool(false);
     for (let i = 0; i < LIMB_NUM; i++) {
-      subFields[i] = this.fields[i].sub(rhs.fields[i]).sub(carry.toField());
+      subFields[i] = bigger.fields[i].sub(smaller.fields[i]).sub(carry.toField());
       carry = subFields[i].greaterThan(MASK);
       subFields[i] = Provable.if(
         carry,
@@ -133,7 +134,7 @@ export class Big extends Struct({
         subFields[i]
       );
     }
-    //carry.assertTrue();
+    carry.assertFalse();
 
     return new Big({
       negative: resultNegative,
