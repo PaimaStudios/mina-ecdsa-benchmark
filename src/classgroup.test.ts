@@ -2,6 +2,7 @@ import { Big } from "./bigint.js";
 import { ClassGroup } from "./classgroup.js";
 
 function checkFromAB(c: ClassGroup) {
+  c.assertValid();
   expect(ClassGroup.from_ab_discriminant(c.a, c.b, c.discriminant)).toEqual(c);
 }
 

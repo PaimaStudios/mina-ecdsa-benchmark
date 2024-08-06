@@ -116,7 +116,7 @@ export class ClassGroup extends Struct({
   }
 
   assertValid() {
-    // TODO
+    this.discriminant.add(Big.from(4n).mul(this.a).mul(this.c)).assertEquals(this.b.square());
   }
 
   assertEquals(other: ClassGroup) {
