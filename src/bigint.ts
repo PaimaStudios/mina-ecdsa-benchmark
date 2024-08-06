@@ -65,6 +65,10 @@ export class Big extends Struct({
     return value;
   }
 
+  toJSON(): string {
+    return String(this.toBigInt());
+  }
+
   // --------------------------------------------------------------------------
   // Bit manipulation
 
@@ -104,7 +108,12 @@ export class Big extends Struct({
     //   -Small + Big = +
     const isSub = this.negative.equals(rhs.negative).not();
     const thisSmall = this.abs().lessThan(rhs.abs());
-    const resultNegative = Provable.if(isSub, Bool, rhs.negative.equals(thisSmall), this.negative);
+    const resultNegative = Provable.if(
+      isSub,
+      Bool,
+      rhs.negative.equals(thisSmall),
+      this.negative
+    );
 
     const addFields = Limbs.empty();
     let carry = Bool(false);
@@ -121,11 +130,18 @@ export class Big extends Struct({
     }
     carry.assertFalse();
 
-    const [bigger, smaller] = Provable.if(thisSmall, Provable.Array(Big, 2), [rhs, this], [this, rhs]);
+    const [bigger, smaller] = Provable.if(
+      thisSmall,
+      Provable.Array(Big, 2),
+      [rhs, this],
+      [this, rhs]
+    );
     const subFields = Limbs.empty();
     carry = Bool(false);
     for (let i = 0; i < LIMB_NUM; i++) {
-      subFields[i] = bigger.fields[i].sub(smaller.fields[i]).sub(carry.toField());
+      subFields[i] = bigger.fields[i]
+        .sub(smaller.fields[i])
+        .sub(carry.toField());
       carry = subFields[i].greaterThan(MASK);
       subFields[i] = Provable.if(
         carry,
@@ -157,11 +173,18 @@ export class Big extends Struct({
     return Big.MAX.modSquare(this.abs());
   }
 
-  floorDiv(y: Big): { q: Big; r: Big } {
+  floorDiv(y: Big): { quot: Big; rem: Big } {
     // this = q * y + r
     const { q, r } = Provable.witness(Struct({ q: Big, r: Big }), () => {
-      const q = this.toBigInt() / y.toBigInt();
-      const r = this.toBigInt() % y.toBigInt();
+      let lhs = this.toBigInt(),
+        rhs = y.toBigInt(),
+        q = lhs / rhs,
+        r = lhs % rhs;
+      // TODO: fix this
+      if (r < 0) {
+        q++;
+        r += rhs;
+      }
       return { q: Big.from(q), r: Big.from(r) };
     });
 
@@ -169,7 +192,16 @@ export class Big extends Struct({
     r.assertLessThan(y);
     r.assertLessThanOrEqual(this);
     y.mul(q).add(r).assertEquals(this);
-    return { q, r };
+    return { quot: q, rem: r };
+  }
+
+  divExact(y: Big): Big {
+    // this = q * y
+    const q = Provable.witness(Big, () => {
+      return Big.from(this.toBigInt() / y.toBigInt());
+    });
+    y.mul(q).assertEquals(this);
+    return q;
   }
 
   powField(exponent: Field): Big {
@@ -184,38 +216,68 @@ export class Big extends Struct({
   }
 
   gcd(b: Big): Big {
+    // result is always positive, unless this==b==0, then result is 0
+    let a: Big = this.abs();
+    b = b.abs();
+
+    let g = Big.ZERO;
     let solved = Bool(false);
-    let result = Big.ZERO;
-    let a: Big = this;
-    for (let i = 0; i < 20; ++i) {
-      // if b == 0, return a
-      const bZero = b.equals(Big.ZERO);
-      const bNewlySolved = solved.not().and(bZero);
-      solved = solved.or(bNewlySolved);
-      result = new Big(Provable.if(bNewlySolved, Big, a, result));
+
+    let g_0 = this.abs();
+    let g_1 = b.abs();
+    for (let i = 0; i < 40; ++i) {
+      const isZero = g_1.equals(Big.ZERO);
+      const newlySolved = solved.not().and(isZero);
+      solved = solved.or(newlySolved);
+      g = new Big(Provable.if(newlySolved, Big, g_0, g));
 
       // a %= b
-      a = a.floorDiv(new Big(Provable.if(bZero, Big, Big.ONE, b))).r;
-
-      // if a == 0, return b
-      const aZero = a.equals(Big.ZERO);
-      const aNewlySolved = solved.not().and(aZero);
-      solved = solved.or(aNewlySolved);
-      result = new Big(Provable.if(aNewlySolved, Big, b, result));
-
-      // b %= a
-      b = b.floorDiv(new Big(Provable.if(aZero, Big, Big.ONE, a))).r;
+      const { rem } = g_0.floorDiv(
+        new Big(Provable.if(isZero, Big, Big.ONE, g_1))
+      );
+      g_0 = g_1;
+      g_1 = rem;
     }
     solved.assertTrue();
-    console.log(
-      "gcd(",
-      this.toBigInt(),
-      ",",
-      b.toBigInt(),
-      ")=",
-      result.toBigInt()
-    );
-    return result;
+
+    return g;
+  }
+
+  gcdext(b: Big): { g: Big; s: Big } {
+    // result is always positive, unless this==b==0, then result is 0
+    let a: Big = this.abs();
+    b = b.abs();
+
+    let g = Big.ZERO;
+    let s = Big.ZERO;
+    let solved = Bool(false);
+
+    let g_0 = this.abs();
+    let g_1 = b.abs();
+    let s_0 = Big.ONE;
+    let s_1 = Big.ZERO;
+    for (let i = 0; i < 40; ++i) {
+      const isZero = g_1.equals(Big.ZERO);
+      const newlySolved = solved.not().and(isZero);
+      solved = solved.or(newlySolved);
+
+      g = new Big(Provable.if(newlySolved, Big, g_0, g));
+      s = new Big(Provable.if(newlySolved, Big, s_0, s));
+
+      // a %= b
+      const { quot, rem } = g_0.floorDiv(
+        new Big(Provable.if(isZero, Big, Big.ONE, g_1))
+      );
+      g_0 = g_1;
+      g_1 = rem;
+
+      const s_2 = s_0.sub(quot.mul(s_1));
+      s_0 = s_1;
+      s_1 = s_2;
+    }
+    solved.assertTrue();
+
+    return { g, s };
   }
 
   // --------------------------------------------------------------------------
