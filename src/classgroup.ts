@@ -1,18 +1,6 @@
 import { Bool, Field, Provable, Struct } from "o1js";
 import { Big } from "./bigint.js";
 
-// Solves `a*x = b (mod m)`.
-function solveLinearCongruence(
-  a: Big,
-  b: Big,
-  m: Big
-): {
-  x: Big;
-  v: Big;
-} {
-  throw new Error("TODO");
-}
-
 export class ClassGroup extends Struct({
   a: Big,
   b: Big,
@@ -67,13 +55,13 @@ export class ClassGroup extends Struct({
     let b = h.mul(u).sub(s.mul(this.c));
     // m = s*t
     let m = s.mul(t);
-    const { x: mu, v } = solveLinearCongruence(a, b, m);
+    const { x: mu, v } = Big.solveLinearCongruence(a, b, m);
     // a = t*v
     a = t.mul(v);
     // b = h - t * mu
     b = h.sub(t.mul(mu));
     // m = s
-    const { x: lambda, v: sigma } = solveLinearCongruence(a, b, m);
+    const { x: lambda, v: sigma } = Big.solveLinearCongruence(a, b, m);
     // k = mu + v*lambda
     const k = mu.add(v.mul(lambda));
     // l = (k*t - h)/s
