@@ -66,7 +66,7 @@ export class Big extends Struct({
   }
 
   toString(): string {
-    return `${this.toBigInt() == 0n && this.negative.toBoolean() ? '-' : ''}${this.toBigInt()}`;
+    return `${this.toBigInt() == 0n && this.negative.toBoolean() ? "-" : ""}${this.toBigInt()}`;
   }
 
   toJSON(): string {
@@ -244,7 +244,7 @@ export class Big extends Struct({
     return g;
   }
 
-  gcdext(b: Big): { g: Big; s: Big } {
+  gcdExt(b: Big): { g: Big; s: Big } {
     // result is always positive, unless this==b==0, then result is 0
     let a: Big = this.abs();
     b = b.abs();
@@ -290,7 +290,7 @@ export class Big extends Struct({
     x: Big;
     v: Big;
   } {
-    const { g, s: d } = a.gcdext(m);
+    const { g, s: d } = a.gcdExt(m);
     const q = b.divExact(g);
     const r = q.mul(d);
     const x = r.floorDiv(m).rem;
@@ -422,15 +422,24 @@ export class Big extends Struct({
   }
 
   assertLessThanOrEqual(other: Big): void {
-    this.cmp(other).assertNotEquals(Ordering.Greater, `expected ${this} <= ${other}`);
+    this.cmp(other).assertNotEquals(
+      Ordering.Greater,
+      `expected ${this} <= ${other}`
+    );
   }
 
   assertGreaterThan(other: Big): void {
-    this.cmp(other).assertEquals(Ordering.Greater, `expected ${this} > ${other}`);
+    this.cmp(other).assertEquals(
+      Ordering.Greater,
+      `expected ${this} > ${other}`
+    );
   }
 
   assertGreaterThanOrEqual(other: Big): void {
-    this.cmp(other).assertNotEquals(Ordering.Less, `expected ${this} >= ${other}`);
+    this.cmp(other).assertNotEquals(
+      Ordering.Less,
+      `expected ${this} >= ${other}`
+    );
   }
 }
 

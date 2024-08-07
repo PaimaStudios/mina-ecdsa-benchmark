@@ -41,11 +41,11 @@ test("gcd", () => {
 });
 
 test("gcdext", () => {
-  expect(Big.from(240n).gcdext(Big.from(46n))).toEqual({
+  expect(Big.from(240n).gcdExt(Big.from(46n))).toEqual({
     g: Big.from(2n),
     s: Big.from(-9n),
   });
-  expect(Big.from(207n).gcdext(Big.from(36n))).toEqual({
+  expect(Big.from(207n).gcdExt(Big.from(36n))).toEqual({
     g: Big.from(9n),
     s: Big.from(-1n),
   });

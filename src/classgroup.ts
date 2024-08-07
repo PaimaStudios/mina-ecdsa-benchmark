@@ -34,11 +34,13 @@ export class ClassGroup extends Struct({
     const g = this.b.add(rhs.b).floorDiv(Big.from(2n)).quot;
     // h = (b2 - b1) / 2
     const h = rhs.b.sub(this.b).floorDiv(Big.from(2n)).quot;
-    console.log("g=", g.toBigInt());
-    console.log("h=", h.toBigInt());
+
+    // sanity check
+    h.add(g).assertEquals(rhs.b);
+    g.sub(h).assertEquals(this.b);
+
     // w = gcd(a1, a2, g)
     const w = this.a.gcd(rhs.a).gcd(g);
-    console.log("w=", w.toBigInt());
     // j = w
     const j = w;
     // s = a1/w
@@ -49,10 +51,8 @@ export class ClassGroup extends Struct({
     const u = g.floorDiv(w).quot;
     // a = t*u
     let a = t.mul(u);
-    // b = h*u - s*c1
-    console.log("s=", s.toBigInt());
-    console.log("c=", this.c.toBigInt());
-    let b = h.mul(u).sub(s.mul(this.c));
+    // b = h*u + s*c1 (original comment incorrectly said -, code was +)
+    let b = h.mul(u).add(s.mul(this.c));
     // m = s*t
     let m = s.mul(t);
     const { x: mu, v } = Big.solveLinearCongruence(a, b, m);
@@ -61,7 +61,7 @@ export class ClassGroup extends Struct({
     // b = h - t * mu
     b = h.sub(t.mul(mu));
     // m = s
-    const { x: lambda, v: sigma } = Big.solveLinearCongruence(a, b, m);
+    const { x: lambda, v: sigma } = Big.solveLinearCongruence(a, b, s);
     // k = mu + v*lambda
     const k = mu.add(v.mul(lambda));
     // l = (k*t - h)/s
