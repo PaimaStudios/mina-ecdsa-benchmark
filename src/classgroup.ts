@@ -51,8 +51,8 @@ export class ClassGroup extends Struct({
     const u = g.floorDiv(w).quot;
     // a = t*u
     let a = t.mul(u);
-    // b = h*u + s*c1 (original comment incorrectly said -, code was +)
-    let b = h.mul(u).add(s.mul(this.c));
+    // b = h*u - s*c1
+    let b = h.mul(u)./*sub*/add(s.mul(this.c));
     // m = s*t
     let m = s.mul(t);
     const { x: mu, v } = Big.solveLinearCongruence(a, b, m);
@@ -88,7 +88,44 @@ export class ClassGroup extends Struct({
       b,
       c,
       discriminant: this.discriminant,
-    });
+    }).reduce();
+  }
+
+  normalize(): ClassGroup {
+    this.assertValid();
+
+    let negative_a = this.a.neg();
+    let alreadyNormal = this.b.greaterThan(negative_a).and(this.b.lessThanOrEqual(this.a));
+
+    let r = this.a.sub(this.b);
+    const denom = this.a.mul(Big.from(2n));
+    negative_a = r.floorDiv(denom).quot;
+    let tmp = negative_a;
+    negative_a = r;
+    r = tmp;
+    let ra = r.mul(this.a);
+    negative_a = ra.mul(Big.from(2n));
+    let b = this.b.add(negative_a);
+
+    negative_a = ra.mul(r);
+    let old_a = this.c.add(negative_a);
+
+    ra = r.mul(this.b);
+    let c = old_a.add(ra);
+
+    const result = new ClassGroup({
+      a: this.a,
+      b,
+      c,
+      discriminant: this.discriminant,
+    })
+    result.assertValid();
+    return new ClassGroup(Provable.if(alreadyNormal, ClassGroup, this, result));
+  }
+
+  reduce(): ClassGroup {
+    // TODO: the loop
+    return this.normalize();
   }
 
   pow(exponent: Big) {
