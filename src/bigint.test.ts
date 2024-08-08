@@ -23,10 +23,47 @@ test("five squared", () => {
   expect(Big.from(-5n).square().toBigInt()).toBe(25n);
 });
 
-test("floor div", () => {
+test("floorDiv", () => {
   expect(Big.from(50n).floorDiv(Big.from(13n))).toEqual({
     quot: Big.from(3n),
     rem: Big.from(11n),
+  });
+
+  expect(Big.from(-50n).floorDiv(Big.from(13n))).toEqual({
+    quot: Big.from(-4n),
+    rem: Big.from(2n),
+  });
+
+  expect(Big.from(50n).floorDiv(Big.from(-13n))).toEqual({
+    quot: Big.from(-4n),
+    rem: Big.from(-2n),
+  });
+
+  expect(Big.from(-50n).floorDiv(Big.from(-13n))).toEqual({
+    quot: Big.from(3n),
+    rem: Big.from(-11n),
+  });
+});
+
+test("truncDiv", () => {
+  expect(Big.from(50n).truncDiv(Big.from(13n))).toEqual({
+    quot: Big.from(3n),
+    rem: Big.from(11n),
+  });
+
+  expect(Big.from(-50n).truncDiv(Big.from(13n))).toEqual({
+    quot: Big.from(-3n),
+    rem: Big.from(-11n),
+  });
+
+  expect(Big.from(50n).truncDiv(Big.from(-13n))).toEqual({
+    quot: Big.from(-3n),
+    rem: Big.from(11n),
+  });
+
+  expect(Big.from(-50n).truncDiv(Big.from(-13n))).toEqual({
+    quot: Big.from(3n),
+    rem: Big.from(-11n),
   });
 });
 

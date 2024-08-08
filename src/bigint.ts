@@ -177,8 +177,36 @@ export class Big extends Struct({
     return Big.MAX.modSquare(this.abs());
   }
 
+  /** Remainder will have the same sign as `y`. */
   floorDiv(y: Big): { quot: Big; rem: Big } {
+    y.assertNotEquals(Big.ZERO);
+
+    // sign(r) = sign(y)
+    const { q, r } = Provable.witness(Struct({ q: Big, r: Big }), () => {
+      let lhs = this.toBigInt(),
+        rhs = y.toBigInt(),
+        q = lhs / rhs,
+        r = lhs % rhs;
+      if (r != 0n && (r < 0n) != (rhs < 0n)) {
+        --q;
+        r += rhs;
+      }
+      return { q: Big.from(q), r: Big.from(r) };
+    });
+
     // this = q * y + r
+    y.mul(q).add(r).assertEquals(this);
+    // abs(r) < abs(rhs)
+    r.abs().assertLessThan(y.abs());
+    // sign(r) = sign(rhs) for truncation
+    r.equals(Big.ZERO).or(r.negative.equals(y.negative)).assertTrue();
+    return { quot: q, rem: r };
+  }
+
+  /** Remainder will have the same sign as `this`. */
+  truncDiv(y: Big): { quot: Big; rem: Big } {
+    y.assertNotEquals(Big.ZERO);
+
     const { q, r } = Provable.witness(Struct({ q: Big, r: Big }), () => {
       let lhs = this.toBigInt(),
         rhs = y.toBigInt(),
@@ -187,12 +215,12 @@ export class Big extends Struct({
       return { q: Big.from(q), r: Big.from(r) };
     });
 
-    //console.log(this.toBigInt(), '==', y.toBigInt(), '*', q.toBigInt(), '+', r.toBigInt());
-
-    // TODO q.assertLessThanOrEqual(this);
-    r.assertLessThan(y);
-    // TODO r.assertLessThanOrEqual(this);
+    // this = q * y + r
     y.mul(q).add(r).assertEquals(this);
+    // sign(r) = sign(lhs) for truncation
+    r.equals(Big.ZERO).or(r.negative.equals(this.negative)).assertTrue();
+    // abs(r) < abs(rhs)
+    r.abs().assertLessThan(y.abs());
     return { quot: q, rem: r };
   }
 
