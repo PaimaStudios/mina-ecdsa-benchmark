@@ -11,6 +11,8 @@ const MASK = MODULUS - 1n;
 
 const Limbs = Provable.Array(Field, LIMB_NUM);
 
+const GCD_ITERATIONS = 650;
+
 enum Ordering {
   Less,
   Equal,
@@ -251,7 +253,7 @@ export class Big extends Struct({
     // result is always positive, unless this==b==0, then result is 0
     let g_0 = this.abs();
     let g_1 = b.abs();
-    for (let i = 0; i < 40; ++i) {
+    for (let i = 0; i < GCD_ITERATIONS; ++i) {
       const isZero = g_1.equals(Big.ZERO);
       const newlySolved = solved.not().and(isZero);
       solved = solved.or(newlySolved);
@@ -264,7 +266,7 @@ export class Big extends Struct({
       g_0 = g_1;
       g_1 = rem;
     }
-    solved.assertTrue();
+    solved.assertTrue(`${GCD_ITERATIONS} iterations insufficient for gcd(${this}, ${b})`);
 
     return g;
   }
@@ -279,7 +281,7 @@ export class Big extends Struct({
     let g_1 = b.abs();
     let s_0 = Big.ONE;
     let s_1 = Big.ZERO;
-    for (let i = 0; i < 40; ++i) {
+    for (let i = 0; i < GCD_ITERATIONS; ++i) {
       const isZero = g_1.equals(Big.ZERO);
       const newlySolved = solved.not().and(isZero);
       solved = solved.or(newlySolved);
@@ -298,7 +300,7 @@ export class Big extends Struct({
       s_0 = s_1;
       s_1 = s_2;
     }
-    solved.assertTrue();
+    solved.assertTrue(`${GCD_ITERATIONS} iterations insufficient for gcd(${this}, ${b})`);
 
     s = new Big(Provable.if(this.negative, Big, s.neg(), s));
     return { g, s };
