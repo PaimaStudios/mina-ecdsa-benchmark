@@ -316,7 +316,7 @@ export class Big extends Struct({
     const { g, s: d } = a.gcdExt(m);
     const q = b.divExact(g);
     const r = q.mul(d);
-    const x = r.floorDiv(m).rem;
+    const x = r.truncDiv(m).rem;
     const v = m.divExact(g);
     return { x, v };
   }
