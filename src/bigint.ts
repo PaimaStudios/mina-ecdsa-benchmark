@@ -245,13 +245,10 @@ export class Big extends Struct({
   }
 
   gcd(b: Big): Big {
-    // result is always positive, unless this==b==0, then result is 0
-    let a: Big = this.abs();
-    b = b.abs();
-
     let g = Big.ZERO;
     let solved = Bool(false);
 
+    // result is always positive, unless this==b==0, then result is 0
     let g_0 = this.abs();
     let g_1 = b.abs();
     for (let i = 0; i < 40; ++i) {
@@ -273,14 +270,11 @@ export class Big extends Struct({
   }
 
   gcdExt(b: Big): { g: Big; s: Big } {
-    // result is always positive, unless this==b==0, then result is 0
-    let a: Big = this.abs();
-    b = b.abs();
-
     let g = Big.ZERO;
     let s = Big.ZERO;
     let solved = Bool(false);
 
+    // result is always positive, unless this==b==0, then result is 0
     let g_0 = this.abs();
     let g_1 = b.abs();
     let s_0 = Big.ONE;
@@ -306,6 +300,7 @@ export class Big extends Struct({
     }
     solved.assertTrue();
 
+    s = new Big(Provable.if(this.negative, Big, s.neg(), s));
     return { g, s };
   }
 
@@ -443,6 +438,10 @@ export class Big extends Struct({
       bothAreZero = bothAreZero.and(other.fields[i].equals(0));
     }
     this.negative.equals(other.negative).or(bothAreZero).assertTrue(message);
+  }
+
+  assertNotEquals(other: Big): void {
+    this.equals(other).assertFalse(`expected ${this} != ${other}`);
   }
 
   assertLessThan(other: Big): void {

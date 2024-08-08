@@ -86,6 +86,12 @@ test("gcdext", () => {
     g: Big.from(9n),
     s: Big.from(-1n),
   });
+  expect(Big.from(-12n).gcdExt(Big.from(16n))).toEqual({
+    // 4 = gcd(-12, 16)
+    // 1 * -12 + 1 * 16 = 4
+    g: Big.from(4n),
+    s: Big.from(1n),
+  });
 });
 
 function checkLinearCongruence(
