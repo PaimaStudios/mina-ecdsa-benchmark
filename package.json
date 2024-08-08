@@ -10,7 +10,7 @@
     "prestart": "npm install --silent && npm run build && docker compose up --wait",
     "start": "node --enable-source-maps build/src/run.js",
     "pretest": "npm run build",
-    "test": "node --experimental-vm-modules node_modules/.bin/jest build/ --max-workers=1"
+    "test": "node --experimental-vm-modules node_modules/.bin/jest --max-workers=1"
   },
   "dependencies": {
     "o1js": "^1.6.0",
