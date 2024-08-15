@@ -19,6 +19,13 @@ enum Ordering {
   Greater,
 }
 
+/** Escape from Provable context to be allowed to format an error message. */
+function errorMessage(x: () => string): string {
+  let s = "";
+  Provable.asProver(() => (s = x()));
+  return s;
+}
+
 export class Big extends Struct({
   negative: Bool,
   // Little-endian: [0] is least significant, [LIMB_NUM-1] is most
@@ -266,7 +273,11 @@ export class Big extends Struct({
       g_0 = g_1;
       g_1 = rem;
     }
-    solved.assertTrue(`${GCD_ITERATIONS} iterations insufficient for gcd(${this}, ${b})`);
+    solved.assertTrue(
+      errorMessage(
+        () => `${GCD_ITERATIONS} iterations insufficient for gcd(${this}, ${b})`
+      )
+    );
 
     return g;
   }
@@ -300,7 +311,11 @@ export class Big extends Struct({
       s_0 = s_1;
       s_1 = s_2;
     }
-    solved.assertTrue(`${GCD_ITERATIONS} iterations insufficient for gcd(${this}, ${b})`);
+    solved.assertTrue(
+      errorMessage(
+        () => `${GCD_ITERATIONS} iterations insufficient for gcd(${this}, ${b})`
+      )
+    );
 
     s = new Big(Provable.if(this.negative, Big, s.neg(), s));
     return { g, s };
@@ -432,7 +447,7 @@ export class Big extends Struct({
   }
 
   assertEquals(other: Big): void {
-    const message = `expected ${this} == ${other}`;
+    const message = errorMessage(() => `expected ${this} == ${other}`);
     let bothAreZero = Bool(true);
     for (let i = 0; i < LIMB_NUM; ++i) {
       this.fields[i].assertEquals(other.fields[i], message);
@@ -443,31 +458,36 @@ export class Big extends Struct({
   }
 
   assertNotEquals(other: Big): void {
-    this.equals(other).assertFalse(`expected ${this} != ${other}`);
+    this.equals(other).assertFalse(
+      errorMessage(() => `expected ${this} != ${other}`)
+    );
   }
 
   assertLessThan(other: Big): void {
-    this.cmp(other).assertEquals(Ordering.Less, `expected ${this} < ${other}`);
+    this.cmp(other).assertEquals(
+      Ordering.Less,
+      errorMessage(() => `expected ${this} < ${other}`)
+    );
   }
 
   assertLessThanOrEqual(other: Big): void {
     this.cmp(other).assertNotEquals(
       Ordering.Greater,
-      `expected ${this} <= ${other}`
+      errorMessage(() => `expected ${this} <= ${other}`)
     );
   }
 
   assertGreaterThan(other: Big): void {
     this.cmp(other).assertEquals(
       Ordering.Greater,
-      `expected ${this} > ${other}`
+      errorMessage(() => `expected ${this} > ${other}`)
     );
   }
 
   assertGreaterThanOrEqual(other: Big): void {
     this.cmp(other).assertNotEquals(
       Ordering.Less,
-      `expected ${this} >= ${other}`
+      errorMessage(() => `expected ${this} >= ${other}`)
     );
   }
 }
