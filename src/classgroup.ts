@@ -1,6 +1,8 @@
 import { Bool, Field, Provable, Struct } from "o1js";
 import { Big } from "./bigint.js";
 
+const REDUCE_ITERATIONS = 250;
+
 export class ClassGroup extends Struct({
   a: Big,
   b: Big,
@@ -100,9 +102,7 @@ export class ClassGroup extends Struct({
     let r = this.a.sub(this.b);
     const denom = this.a.mul(Big.from(2n));
     negative_a = r.floorDiv(denom).quot;
-    let tmp = negative_a;
-    negative_a = r;
-    r = tmp;
+    [negative_a, r] = [r, negative_a];
     let ra = r.mul(this.a);
     negative_a = ra.mul(Big.from(2n));
     let b = this.b.add(negative_a);
@@ -124,8 +124,45 @@ export class ClassGroup extends Struct({
   }
 
   reduce(): ClassGroup {
-    // TODO: the loop
-    return this.normalize();
+    let result = this.normalize();
+
+    let solved = Bool(false);
+    let { a, b, c, discriminant } = result;
+    for (let i = 0; i < REDUCE_ITERATIONS; ++i) {
+      const shouldContinue = Provable.if(b.negative, Bool, a.greaterThanOrEqual(c), a.greaterThan(c));
+      const newlySolved = solved.not().and(shouldContinue.not());
+      solved = solved.or(newlySolved);
+      result = new ClassGroup(Provable.if(newlySolved, ClassGroup, { a, b, c, discriminant }, result))
+
+      let s = c.add(b);
+      let x = c.add(c);
+
+      let old_b = b;
+      b = s.mul(x);
+
+      [s, b] = [b, s];
+      [a, c] = [c, a];
+
+      // x = 2sc
+      b = s.mul(a);
+      x = x.mul(b).mul(Big.from(2n));
+
+      // b = x - old_b
+      b = x.sub(old_b);
+
+      // x = b*s
+      x = old_b.mul(s);
+
+      // s = c*s^2
+      old_b = s.mul(s);
+      s = a.mul(old_b);
+
+      // c = s - x
+      c = s.sub(x);
+    }
+    solved.assertTrue(`${REDUCE_ITERATIONS} iterations insufficient for reduce(${this})`);
+
+    return result.normalize();
   }
 
   pow(exponent: Big) {
