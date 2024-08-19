@@ -196,7 +196,7 @@ export class Big extends Struct({
         rhs = y.toBigInt(),
         q = lhs / rhs,
         r = lhs % rhs;
-      if (r != 0n && (r < 0n) != (rhs < 0n)) {
+      if (r != 0n && r < 0n != rhs < 0n) {
         --q;
         r += rhs;
       }
